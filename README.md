@@ -30,7 +30,7 @@ _✨ 如果你希望在你群禁用表情包 ✨_
 <summary>使用 nb-cli 安装</summary>
 在 nonebot2 项目的根目录下打开命令行, 输入以下指令即可安装
 
-    nb plugin install nonebot-plugin-ban-sticker
+    nb plugin install nonebot_plugin_ban_sticker
 
 </details>
 
@@ -41,12 +41,12 @@ _✨ 如果你希望在你群禁用表情包 ✨_
 <details>
 <summary>pip</summary>
 
-    pip install nonebot-plugin-ban-sticker
+    pip install nonebot_plugin_ban_sticker
 </details>
 
 打开 nonebot2 项目根目录下的 `pyproject.toml` 文件, 在 `[tool.nonebot]` 部分追加写入
 
-    plugins = ["nonebot_plugin_template"]
+    plugins = ["nonebot_plugin_ban_sticker"]
 
 </details>
 
