@@ -5,7 +5,20 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, GroupRecallNoticeEven
 from nonebot.adapters.onebot.v11.bot import Bot
 from .config import config
 
+from nonebot.plugin import PluginMetadata
+
 cfg = get_plugin_config(config)
+
+__plugin_meta__ = PluginMetadata(
+    name="nonebot-plugin-ban-sticker",
+    description="如果你希望在你群禁用表情包",
+    usage="自动撤回表情包并禁言",
+    type="application",
+    homepage="https://github.com/owner/nonebot-plugin-ban-sticker",
+    config=Config,
+    supported_adapters={"~onebot.v11"},
+)
+
 pending_bans: Dict[int, tuple[asyncio.Event, asyncio.Event]] = {}
 pending_msg: Dict[int, list[int]] = {}
 ban_lock = asyncio.Lock()
@@ -69,12 +82,12 @@ async def _(bot: Bot, event: GroupMessageEvent):
                 pending_bans[event.user_id][0].wait(), timeout=cfg.ban_sticker_wait_time
             )
         except asyncio.TimeoutError:
-            ban_count = len(pending_msg[event.user_id])
+            ban_count = cfg.ban_sticker_ban_time * (len(pending_msg[event.user_id])**2)
             if ban_count > 0:
                 await bot.set_group_ban(
                     group_id=event.group_id,
                     user_id=event.user_id,
-                    duration=cfg.ban_sticker_ban_time * (ban_count**2),
+                    duration=ban_count,
                 )
             await bot.delete_msg(message_id=event.message_id)
         finally:
