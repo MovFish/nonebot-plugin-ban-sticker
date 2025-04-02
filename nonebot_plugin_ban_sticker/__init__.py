@@ -14,7 +14,7 @@ __plugin_meta__ = PluginMetadata(
     description="如果你希望在你群禁用表情包",
     usage="自动撤回表情包并禁言",
     type="application",
-    homepage="https://github.com/owner/nonebot-plugin-ban-sticker",
+    homepage="https://github.com/MovFish/nonebot-plugin-ban-sticker",
     config=config,
     supported_adapters={"~onebot.v11"},
 )
