@@ -1,6 +1,6 @@
 [project]
 name = "nonebot-plugin-ban-sticker"
-version = "0.1.2"
+version = "0.1.3"
 description = "If you plan to ban sticker in your group chat"
 license = "MIT"
 readme = "README.md"
