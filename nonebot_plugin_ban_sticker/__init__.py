@@ -40,7 +40,11 @@ def emoticon_rule(event: GroupMessageEvent) -> bool:
 
     for msg in event.message:
         try:
-            if msg.type == "mface" or msg.data["summary"] == "[动画表情]":
+            if (
+                msg.type == "mface"
+                or msg.data["summary"] == "[动画表情]"
+                or "emoji_id" in msg.data
+            ):
                 return True
         except:
             continue
