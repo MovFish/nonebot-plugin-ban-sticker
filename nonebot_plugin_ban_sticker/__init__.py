@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import dataclass, field
 from typing import Dict, Union
 from nonebot import get_plugin_config, on_type
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, GroupRecallNoticeEvent
@@ -19,8 +20,15 @@ __plugin_meta__ = PluginMetadata(
     supported_adapters={"~onebot.v11"},
 )
 
-pending_bans: Dict[int, tuple[asyncio.Event, asyncio.Event]] = {}
-pending_msg: Dict[int, list[int]] = {}
+
+@dataclass
+class PendingBan:
+    message_ids: set[int] = field(default_factory=set)
+    all_recalled: asyncio.Event = field(default_factory=asyncio.Event)
+
+
+PendingKey = tuple[int, int]
+pending_bans: Dict[PendingKey, PendingBan] = {}
 ban_lock = asyncio.Lock()
 
 
@@ -52,16 +60,7 @@ def emoticon_rule(event: GroupMessageEvent) -> bool:
 
 
 def recall_rule(event: GroupRecallNoticeEvent) -> bool:
-    if not in_group(event):
-        return False
-    if (
-        event.user_id in pending_bans
-        and event.user_id in pending_msg
-        and event.message_id in pending_msg[event.user_id]
-    ):
-        return True
-    else:
-        return False
+    return in_group(event)
 
 
 on_emoticon = on_type(GroupMessageEvent, rule=emoticon_rule, priority=7, block=False)
@@ -70,49 +69,61 @@ on_recall = on_type(GroupRecallNoticeEvent, rule=recall_rule, priority=7, block=
 
 @on_emoticon.handle()
 async def _(bot: Bot, event: GroupMessageEvent):
+    key = (event.group_id, event.user_id)
     async with ban_lock:
-        if pending_msg.get(event.user_id, False):
-            pending_msg[event.user_id].append(event.message_id)
-            frist = False
+        batch = pending_bans.get(key)
+        if batch is not None:
+            batch.message_ids.add(event.message_id)
+            is_first = False
         else:
-            cancel_event = asyncio.Event()
-            done_event = asyncio.Event()
-            pending_bans[event.user_id] = (cancel_event, done_event)
-            pending_msg[event.user_id] = [event.message_id]
-            frist = True
-    if frist:
+            batch = PendingBan({event.message_id})
+            pending_bans[key] = batch
+            is_first = True
+
+    if not is_first:
+        return
+
+    try:
         try:
             await asyncio.wait_for(
-                pending_bans[event.user_id][0].wait(), timeout=cfg.ban_sticker_wait_time
+                batch.all_recalled.wait(), timeout=cfg.ban_sticker_wait_time
             )
+            return
         except asyncio.TimeoutError:
-            ban_count = cfg.ban_sticker_ban_time * (len(pending_msg[event.user_id])**2)
+            async with ban_lock:
+                if pending_bans.get(key) is not batch:
+                    return
+                pending_bans.pop(key)
+                remaining_message_ids = set(batch.message_ids)
+
+            if not remaining_message_ids:
+                return
+
+            ban_count = cfg.ban_sticker_ban_time * (len(remaining_message_ids) ** 2)
             if ban_count > 0:
                 await bot.set_group_ban(
                     group_id=event.group_id,
                     user_id=event.user_id,
                     duration=ban_count,
                 )
-            await bot.delete_msg(message_id=event.message_id)
-        finally:
-            pending_bans[event.user_id][1].set()
-            await asyncio.sleep(30)
-            async with ban_lock:
-                if event.user_id in pending_bans:
-                    del pending_bans[event.user_id]
-                if event.user_id in pending_msg:
-                    del pending_msg[event.user_id]
-    else:
-        await pending_bans[event.user_id][1].wait()
-        if not pending_bans[event.user_id][0].is_set():
-            await bot.delete_msg(message_id=event.message_id)
+            for message_id in remaining_message_ids:
+                await bot.delete_msg(message_id=message_id)
+    finally:
+        async with ban_lock:
+            if pending_bans.get(key) is batch:
+                pending_bans.pop(key)
     await on_emoticon.finish()
 
 
 @on_recall.handle()
 async def __(event: GroupRecallNoticeEvent):
+    key = (event.group_id, event.user_id)
     async with ban_lock:
-        pending_msg[event.user_id].remove(event.message_id)
-        if len(pending_msg[event.user_id]) == 0:
-            pending_bans[event.user_id][0].set()
+        batch = pending_bans.get(key)
+        if batch is None or event.message_id not in batch.message_ids:
+            return
+        batch.message_ids.discard(event.message_id)
+        if not batch.message_ids:
+            pending_bans.pop(key)
+            batch.all_recalled.set()
     await on_recall.finish()
